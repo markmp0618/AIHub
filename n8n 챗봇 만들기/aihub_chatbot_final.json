@@ -1,0 +1,247 @@
+{
+    "name": "AIHub Chatbot v1.1",
+    "nodes": [
+        {
+            "parameters": {
+                "httpMethod": "POST",
+                "path": "aihub/recommend",
+                "responseMode": "responseNode",
+                "options": {}
+            },
+            "id": "webhook-trigger",
+            "name": "Webhook",
+            "type": "n8n-nodes-base.webhook",
+            "typeVersion": 2,
+            "position": [
+                256,
+                304
+            ],
+            "webhookId": "aihub-chatbot-webhook"
+        },
+        {
+            "parameters": {
+                "jsCode": "const raw = $input.first().json || {};\nconst body = raw.body ?? raw;\n\nconst messageRaw =\n  body.message ??\n  body.user_query ??\n  body.text ??\n  body.query ??\n  \"\";\n\nconst message = String(messageRaw).trim().substring(0, 2000);\n\nconst sessionId =\n  body.session_id ??\n  body.sessionId ??\n  body.user_id ??\n  body.userId ??\n  \"default\";\n\nconst normalizedMessage = message.replace(/\\s+/g, \" \").trim();\n\n// 키워드 추출: 한글/영문/숫자만\nconst keywords = normalizedMessage\n  .replace(/[^\\p{L}\\p{N}\\s]/gu, \" \")\n  .split(/\\s+/)\n  .filter(k => k.length > 1);\n\nreturn [{\n  json: {\n    message,\n    sessionId,\n    normalizedMessage,\n    keywords: keywords.join(\" \")\n  }\n}];\n"
+            },
+            "id": "process-input",
+            "name": "Process Input",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                464,
+                304
+            ]
+        },
+        {
+            "parameters": {
+                "options": {
+                    "temperature": 0.5
+                }
+            },
+            "id": "gemini-model",
+            "name": "Gemini Model",
+            "type": "@n8n/n8n-nodes-langchain.lmChatGoogleGemini",
+            "typeVersion": 1,
+            "position": [
+                560,
+                608
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "LvKiLI0sFdNjT8AH",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "toolDescription": "AIHub DB에서 가이드북, 프리셋, 도구를 검색합니다. 핵심 키워드 1-3개로 검색하세요. 예: ChatGPT, 시장조사, 이미지생성",
+                "url": "https://jogjurkmqfqbwfbhbvwl.supabase.co/rest/v1/aihub_content_catalog_v1",
+                "sendQuery": true,
+                "parametersQuery": {
+                    "values": [
+                        {
+                            "name": "select",
+                            "valueProvider": "fieldValue",
+                            "value": "item_type,title,one_liner,url,tags"
+                        },
+                        {
+                            "name": "limit",
+                            "valueProvider": "fieldValue",
+                            "value": "5"
+                        },
+                        {
+                            "name": "or",
+                            "valueProvider": "modelRequired",
+                            "value": ""
+                        }
+                    ]
+                },
+                "sendHeaders": true,
+                "parametersHeaders": {
+                    "values": [
+                        {
+                            "name": "apikey",
+                            "valueProvider": "fieldValue",
+                            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZ2p1cmttcWZxYndmYmhidndsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjUzOTQ0OSwiZXhwIjoyMDcyMTE1NDQ5fQ.CLUItDgH2iafi8pT9fW5hP3oC3_UN8Lg1IgaW9-cJE4"
+                        },
+                        {
+                            "name": "Authorization",
+                            "valueProvider": "fieldValue",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZ2p1cmttcWZxYndmYmhidndsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjUzOTQ0OSwiZXhwIjoyMDcyMTE1NDQ5fQ.CLUItDgH2iafi8pT9fW5hP3oC3_UN8Lg1IgaW9-cJE4"
+                        }
+                    ]
+                },
+                "placeholderDefinitions": {
+                    "values": [
+                        {
+                            "name": "or",
+                            "description": "Supabase OR 필터. 형식: (title.ilike.*키워드*,one_liner.ilike.*키워드*) 예시: (title.ilike.*ChatGPT*,one_liner.ilike.*ChatGPT*) 또는 (title.ilike.*시장조사*,one_liner.ilike.*시장조사*). 반드시 핵심 키워드 1개만 사용.",
+                            "type": "string"
+                        }
+                    ]
+                }
+            },
+            "id": "supabase-tool",
+            "name": "Search AIHub DB",
+            "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+            "typeVersion": 1.1,
+            "position": [
+                896,
+                592
+            ]
+        },
+        {
+            "parameters": {
+                "promptType": "define",
+                "text": "=당신은 AIHub AI 어시스턴트입니다.\n\n## 규칙\n1. search_aihub_db 도구로 먼저 검색하세요\n2. 검색 시 핵심 키워드 1개만 사용 (예: ChatGPT, 시장조사)\n3. 응답은 3-4문장으로 간결하게\n4. DB에 있으면: 제목 + 한줄소개 + URL 제공\n5. DB에 없으면: \"AIHub에는 아직 해당 가이드가 없어요\" + 간단한 팁 1개\n\n## 응답 형식\n- 이모지 1개로 시작\n- 핵심 정보만 전달\n- URL은 반드시 포함\n\n## 사용자 메시지\n{{ $json.message }}",
+                "options": {}
+            },
+            "id": "ai-agent",
+            "name": "AI Agent",
+            "type": "@n8n/n8n-nodes-langchain.agent",
+            "typeVersion": 1.7,
+            "position": [
+                720,
+                304
+            ]
+        },
+        {
+            "parameters": {
+                "respondWith": "json",
+                "responseBody": "={{$json}}",
+                "options": {
+                    "responseHeaders": {
+                        "entries": [
+                            {
+                                "name": "Content-Type",
+                                "value": "application/json; charset=utf-8"
+                            }
+                        ]
+                    }
+                }
+            },
+            "id": "response-node",
+            "name": "Response",
+            "type": "n8n-nodes-base.respondToWebhook",
+            "typeVersion": 1.1,
+            "position": [
+                1376,
+                304
+            ]
+        },
+        {
+            "parameters": {
+                "assignments": {
+                    "assignments": [
+                        {
+                            "id": "37b1cba3-402f-4064-8d79-b1fef378bb77",
+                            "name": "answer",
+                            "value": "={{$node[\"AI Agent\"].json.output}}",
+                            "type": "string"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "type": "n8n-nodes-base.set",
+            "typeVersion": 3.4,
+            "position": [
+                1120,
+                304
+            ],
+            "id": "71b66197-5bc1-4a19-bf99-31776ea04bea",
+            "name": "Edit Fields"
+        }
+    ],
+    "connections": {
+        "Webhook": {
+            "main": [
+                [
+                    {
+                        "node": "Process Input",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Process Input": {
+            "main": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Gemini Model": {
+            "ai_languageModel": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_languageModel",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Search AIHub DB": {
+            "ai_tool": [
+                [
+                    {
+                        "node": "AI Agent",
+                        "type": "ai_tool",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "AI Agent": {
+            "main": [
+                [
+                    {
+                        "node": "Edit Fields",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Edit Fields": {
+            "main": [
+                [
+                    {
+                        "node": "Response",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    }
+}

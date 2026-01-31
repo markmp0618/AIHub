@@ -1,0 +1,13 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(git --version)",
+      "WebFetch(domain:docs.anthropic.com)",
+      "WebFetch(domain:skillsmp.com)",
+      "WebFetch(domain:medium.com)",
+      "WebFetch(domain:github.com)",
+      "Bash(git clone:*)",
+      "Bash(git config:*)"
+    ]
+  }
+}

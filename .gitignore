@@ -1,0 +1,7 @@
+﻿node_modules/
+**/node_modules/
+**/nul
+*.node
+.git/
+dist/
+build/

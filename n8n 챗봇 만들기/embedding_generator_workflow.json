@@ -1,0 +1,257 @@
+{
+    "name": "AIHub Embedding Generator",
+    "nodes": [
+        {
+            "parameters": {},
+            "id": "trigger",
+            "name": "Start",
+            "type": "n8n-nodes-base.manualTrigger",
+            "typeVersion": 1,
+            "position": [
+                200,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "https://jogjurkmqfqbwfbhbvwl.supabase.co/rest/v1/aihub_content_catalog_v1",
+                "sendQuery": true,
+                "queryParameters": {
+                    "parameters": [
+                        {
+                            "name": "select",
+                            "value": "item_id,item_type,title,one_liner,description"
+                        }
+                    ]
+                },
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZ2p1cmttcWZxYndmYmhidndsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjUzOTQ0OSwiZXhwIjoyMDcyMTE1NDQ5fQ.CLUItDgH2iafi8pT9fW5hP3oC3_UN8Lg1IgaW9-cJE4"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZ2p1cmttcWZxYndmYmhidndsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjUzOTQ0OSwiZXhwIjoyMDcyMTE1NDQ5fQ.CLUItDgH2iafi8pT9fW5hP3oC3_UN8Lg1IgaW9-cJE4"
+                        }
+                    ]
+                },
+                "options": {}
+            },
+            "id": "fetch-content",
+            "name": "Fetch All Content",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                400,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "batchSize": 1,
+                "options": {}
+            },
+            "id": "split-batches",
+            "name": "Split Into Batches",
+            "type": "n8n-nodes-base.splitInBatches",
+            "typeVersion": 3,
+            "position": [
+                600,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "jsCode": "const item = $input.first().json;\n\n// 임베딩할 텍스트 생성: 제목 + 한줄소개 + 설명\nconst title = item.title || '';\nconst oneLiner = item.one_liner || '';\nconst description = item.description || '';\n\nconst contentText = `${title}. ${oneLiner}. ${description}`.trim();\n\nreturn [{\n  json: {\n    content_id: item.item_id,\n    item_type: item.item_type,\n    content_text: contentText\n  }\n}];"
+            },
+            "id": "prepare-text",
+            "name": "Prepare Text",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                800,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "=https://generativelanguage.googleapis.com/v1beta/models/text-embedding-004:embedContent?key={{ $credentials.googlePalmApi.apiKey }}",
+                "method": "POST",
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"model\": \"models/text-embedding-004\",\n  \"content\": {\n    \"parts\": [\n      {\n        \"text\": {{ JSON.stringify($json.content_text) }}\n      }\n    ]\n  }\n}",
+                "options": {}
+            },
+            "id": "google-embedding",
+            "name": "Google Embedding API",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1000,
+                300
+            ],
+            "credentials": {
+                "googlePalmApi": {
+                    "id": "YOUR_CREDENTIAL_ID",
+                    "name": "Google Gemini(PaLM) Api account"
+                }
+            }
+        },
+        {
+            "parameters": {
+                "jsCode": "const input = $('Prepare Text').first().json;\nconst embedding = $input.first().json.embedding?.values || [];\n\nreturn [{\n  json: {\n    content_id: input.content_id,\n    item_type: input.item_type,\n    content_text: input.content_text,\n    embedding: embedding\n  }\n}];"
+            },
+            "id": "merge-data",
+            "name": "Merge Data",
+            "type": "n8n-nodes-base.code",
+            "typeVersion": 2,
+            "position": [
+                1200,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "url": "https://jogjurkmqfqbwfbhbvwl.supabase.co/rest/v1/aihub_embeddings",
+                "method": "POST",
+                "sendHeaders": true,
+                "headerParameters": {
+                    "parameters": [
+                        {
+                            "name": "apikey",
+                            "value": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZ2p1cmttcWZxYndmYmhidndsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjUzOTQ0OSwiZXhwIjoyMDcyMTE1NDQ5fQ.CLUItDgH2iafi8pT9fW5hP3oC3_UN8Lg1IgaW9-cJE4"
+                        },
+                        {
+                            "name": "Authorization",
+                            "value": "Bearer eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJpc3MiOiJzdXBhYmFzZSIsInJlZiI6ImpvZ2p1cmttcWZxYndmYmhidndsIiwicm9sZSI6InNlcnZpY2Vfcm9sZSIsImlhdCI6MTc1NjUzOTQ0OSwiZXhwIjoyMDcyMTE1NDQ5fQ.CLUItDgH2iafi8pT9fW5hP3oC3_UN8Lg1IgaW9-cJE4"
+                        },
+                        {
+                            "name": "Content-Type",
+                            "value": "application/json"
+                        },
+                        {
+                            "name": "Prefer",
+                            "value": "return=minimal"
+                        }
+                    ]
+                },
+                "sendBody": true,
+                "specifyBody": "json",
+                "jsonBody": "={\n  \"content_id\": {{ JSON.stringify($json.content_id) }},\n  \"item_type\": {{ JSON.stringify($json.item_type) }},\n  \"content_text\": {{ JSON.stringify($json.content_text) }},\n  \"embedding\": {{ JSON.stringify($json.embedding) }}\n}",
+                "options": {}
+            },
+            "id": "save-embedding",
+            "name": "Save to Supabase",
+            "type": "n8n-nodes-base.httpRequest",
+            "typeVersion": 4.2,
+            "position": [
+                1400,
+                300
+            ]
+        },
+        {
+            "parameters": {
+                "options": {}
+            },
+            "id": "loop-done",
+            "name": "Loop Done",
+            "type": "n8n-nodes-base.noOp",
+            "typeVersion": 1,
+            "position": [
+                1600,
+                300
+            ]
+        }
+    ],
+    "connections": {
+        "Start": {
+            "main": [
+                [
+                    {
+                        "node": "Fetch All Content",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Fetch All Content": {
+            "main": [
+                [
+                    {
+                        "node": "Split Into Batches",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Split Into Batches": {
+            "main": [
+                [
+                    {
+                        "node": "Prepare Text",
+                        "type": "main",
+                        "index": 0
+                    }
+                ],
+                [
+                    {
+                        "node": "Loop Done",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Prepare Text": {
+            "main": [
+                [
+                    {
+                        "node": "Google Embedding API",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Google Embedding API": {
+            "main": [
+                [
+                    {
+                        "node": "Merge Data",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Merge Data": {
+            "main": [
+                [
+                    {
+                        "node": "Save to Supabase",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        },
+        "Save to Supabase": {
+            "main": [
+                [
+                    {
+                        "node": "Split Into Batches",
+                        "type": "main",
+                        "index": 0
+                    }
+                ]
+            ]
+        }
+    },
+    "settings": {
+        "executionOrder": "v1"
+    }
+}

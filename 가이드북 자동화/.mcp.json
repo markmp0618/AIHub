@@ -1,0 +1,16 @@
+{
+  "mcpServers": {
+    "n8n-mcp": {
+      "command": "npx",
+      "args": ["n8n-mcp"],
+      "env": {
+        "MCP_MODE": "stdio",
+        "LOG_LEVEL": "error",
+        "DISABLE_CONSOLE_OUTPUT": "true",
+        "N8N_API_URL": "https://semiformal-uncaptiously-lyman.ngrok-free.dev",
+        "N8N_BASE_URL": "https://semiformal-uncaptiously-lyman.ngrok-free.dev",
+        "N8N_API_KEY": "eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJzdWIiOiIxMTg0OWNkYi0xZGE1LTQ5NjMtYjM3NS0zZGYwZGFiMzg4ZDciLCJpc3MiOiJuOG4iLCJhdWQiOiJwdWJsaWMtYXBpIiwiaWF0IjoxNzY5MzYwMzc4LCJleHAiOjE3NzE5MDkyMDB9.4QxNFWrnjpyuHXQFtjQwBgXpfo4JUZMBFVp2HJ22cWg"
+      }
+    }
+  }
+}

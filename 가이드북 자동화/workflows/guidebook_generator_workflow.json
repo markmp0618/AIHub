@@ -1,0 +1,411 @@
+{
+  "name": "AIHub 가이드북 자동 생성 v2",
+  "nodes": [
+    {
+      "parameters": {},
+      "id": "manual-trigger",
+      "name": "Manual Trigger",
+      "type": "n8n-nodes-base.manualTrigger",
+      "typeVersion": 1,
+      "position": [-200, 0]
+    },
+    {
+      "parameters": {
+        "httpMethod": "POST",
+        "path": "guidebook",
+        "responseMode": "responseNode",
+        "options": {}
+      },
+      "id": "webhook-1",
+      "name": "Webhook",
+      "type": "n8n-nodes-base.webhook",
+      "typeVersion": 2,
+      "position": [-200, 200],
+      "webhookId": "guidebook-generator"
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 입력 데이터 처리\nlet topic, category;\n\n// Webhook에서 온 경우\nif ($input.first().json.body) {\n  topic = $input.first().json.body.topic;\n  category = $input.first().json.body.category || 'AI 기초 입문';\n} \n// Manual Trigger에서 온 경우 - 기본값 설정\nelse {\n  topic = $input.first().json.topic || 'ChatGPT 프롬프트 작성법';\n  category = $input.first().json.category || 'AI 기초 입문';\n}\n\nreturn [{ \n  json: { \n    topic, \n    category,\n    sessionId: `guidebook_${Date.now()}`\n  } \n}];"
+      },
+      "id": "set-input",
+      "name": "Set Input",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [0, 100]
+    },
+    {
+      "parameters": {
+        "model": {
+          "mode": "id",
+          "value": "gpt-4o"
+        },
+        "options": {
+          "maxTokens": 8000,
+          "responseFormat": "json_object",
+          "temperature": 0.7
+        }
+      },
+      "id": "openai-model",
+      "name": "OpenAI GPT-4o",
+      "type": "@n8n/n8n-nodes-langchain.lmChatOpenAi",
+      "typeVersion": 1.3,
+      "position": [220, 300],
+      "credentials": {
+        "openAiApi": {
+          "id": "YOUR_OPENAI_CREDENTIAL_ID",
+          "name": "OpenAI API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "contextWindowLength": 5,
+        "sessionIdType": "customKey",
+        "sessionKey": "={{ $json.sessionId }}"
+      },
+      "id": "memory-buffer",
+      "name": "Simple Memory",
+      "type": "@n8n/n8n-nodes-langchain.memoryBufferWindow",
+      "typeVersion": 1.3,
+      "position": [220, 450]
+    },
+    {
+      "parameters": {
+        "toolDescription": "웹에서 정보를 검색하여 가이드북 작성에 필요한 참고 자료를 찾습니다. AI 도구 사용법, 튜토리얼, 공식 문서 등을 검색할 수 있습니다.",
+        "method": "GET",
+        "url": "https://www.google.com/search?q={query}",
+        "authentication": "none",
+        "placeholderDefinitions": {
+          "values": [
+            {
+              "name": "query",
+              "description": "검색할 키워드 또는 질문"
+            }
+          ]
+        },
+        "optimizeResponse": true
+      },
+      "id": "http-tool",
+      "name": "Web Search Tool",
+      "type": "@n8n/n8n-nodes-langchain.toolHttpRequest",
+      "typeVersion": 1.1,
+      "position": [420, 450]
+    },
+    {
+      "parameters": {
+        "promptType": "define",
+        "text": "주제: {{ $json.topic }}\n카테고리: {{ $json.category }}\n\n위 주제에 대해 AIHub 가이드북을 JSON 형식으로 생성해주세요.",
+        "options": {
+          "systemMessage": "너는 \"AIHub 가이드북 제작 리서처 + 실전 커리큘럼 설계자\"다.\n목표: 사용자가 외부 AI 툴에서 그대로 따라 할 수 있는 '실행형 가이드북 원재료'를 만든다.\n가장 중요한 것은 Step-by-step 실행 가이드의 구체성과 완주 가능성이다.\n\n[입력]\n- 가이드북 주제: 사용자가 입력한 주제\n- 타겟: 대학생/초급~중급\n- 무료 기준: 무료로 따라할 수 있는 흐름 중심\n\n[카테고리 목록]\n1. AI 기초 입문 (난이도: Beginner)\n2. 콘텐츠 제작\n3. 개발 & 코딩\n4. 글쓰기 & 교정\n5. 취업 준비\n6. 연구 & 학습\n7. 업무 자동화\n8. 창업 & 비즈니스\n\n[리서치 규칙]\n- 웹 검색 도구를 사용하여 최신 정보 확인\n- 최소 8개 이상 고품질 소스 확보\n- 본문에 [1] 같은 인용표시 사용하지 마\n- References 섹션에 링크 + 한줄 설명 제공\n- 확실하지 않으면 \"불확실\" 표시\n\n[출력 형식 - JSON으로 출력]\n\n{\n  \"header\": {\n    \"category\": \"카테고리명\",\n    \"title\": \"가이드북 제목\",\n    \"introduction\": \"소개 1~2문장\",\n    \"estimated_time\": \"예상 소요시간\",\n    \"difficulty\": \"초급/중급/고급\",\n    \"tools\": [\"사용 도구 1\", \"사용 도구 2\"],\n    \"tags\": [\"태그1\", \"태그2\", \"태그3\"]\n  },\n  \"summary_cards\": {\n    \"one_liner\": \"한 줄 요약 (3줄, 줄바꿈 포함)\",\n    \"recommended_for\": [\"추천 대상 1\", \"추천 대상 2\", \"추천 대상 3\"],\n    \"prerequisites\": [\"준비물 1\", \"준비물 2\", \"준비물 3\"],\n    \"core_principles\": [\"핵심 원칙 1\", \"핵심 원칙 2\", \"핵심 원칙 3\"]\n  },\n  \"steps\": [\n    {\n      \"step_number\": 1,\n      \"title\": \"Step 제목\",\n      \"goal\": \"목표 1~2문장\",\n      \"completion_criteria\": [\"완료조건 1\", \"완료조건 2\"],\n      \"content_blocks\": [\n        {\n          \"type\": \"why\",\n          \"content\": \"왜 이 단계가 필요한가 설명\"\n        },\n        {\n          \"type\": \"actions\",\n          \"items\": [\"할 일 1\", \"할 일 2\", \"할 일 3\"]\n        },\n        {\n          \"type\": \"copy_block\",\n          \"tool\": \"ChatGPT\",\n          \"where\": \"입력창에 붙여넣기\",\n          \"prompt\": \"복사할 프롬프트 내용\"\n        },\n        {\n          \"type\": \"example\",\n          \"input\": \"입력 예시\",\n          \"output\": \"출력 예시\"\n        },\n        {\n          \"type\": \"branch\",\n          \"title\": \"상황별 선택\",\n          \"options\": [\n            {\"case\": \"Case A (10분)\", \"description\": \"간단히 하려면\"},\n            {\"case\": \"Case B (30분)\", \"description\": \"제대로 하려면\"}\n          ]\n        }\n      ],\n      \"common_mistakes\": [\n        {\"mistake\": \"실수 내용\", \"tip\": \"해결 팁\"}\n      ],\n      \"mini_checklist\": [\"체크 항목 1\", \"체크 항목 2\"]\n    }\n  ],\n  \"prompt_pack\": [\n    {\n      \"title\": \"프롬프트 제목\",\n      \"when_to_use\": [\"사용 상황 1\", \"사용 상황 2\"],\n      \"prompt\": \"프롬프트 내용\",\n      \"failure_pattern\": \"실패 패턴\",\n      \"fix\": \"수정 방법\",\n      \"related_steps\": [1, 2, 3]\n    }\n  ],\n  \"references\": [\n    {\n      \"title\": \"자료 제목\",\n      \"url\": \"https://example.com\",\n      \"learning_point\": \"여기서 배울 수 있는 것\"\n    }\n  ]\n}\n\n[강제 조건]\n- Step 개수: 6~12개\n- 전체 Step 중 최소 2개는 branch(분기) 포함\n- 전체 Step 중 최소 3개는 copy_block(복붙 블록) 포함\n- 각 Step에 \"어느 도구에 어디에 붙여넣는지\" 명시\n- 마지막 Step에는 \"최종 산출물 점검 + Next steps\" 포함\n- 프롬프트 팩: 4~6개\n\n[스타일]\n- 한국어로 작성\n- 과장/홍보 문구 금지\n- 대학생이 바로 실행 가능하게 구체적으로\n\n이제 사용자가 입력한 주제에 대해 위 JSON 형식으로 완전한 가이드북을 생성해라."
+        }
+      },
+      "id": "ai-agent",
+      "name": "AI Agent",
+      "type": "@n8n/n8n-nodes-langchain.agent",
+      "typeVersion": 3.1,
+      "position": [220, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// JSON 파싱\nconst response = $input.first().json.output;\n\nlet guidebook;\ntry {\n  // JSON 블록 추출 (```json ... ``` 형식 처리)\n  const jsonMatch = response.match(/```json\\n?([\\s\\S]*?)\\n?```/);\n  if (jsonMatch) {\n    guidebook = JSON.parse(jsonMatch[1]);\n  } else if (typeof response === 'string') {\n    guidebook = JSON.parse(response);\n  } else {\n    guidebook = response;\n  }\n} catch (e) {\n  // 이미 객체인 경우\n  if (typeof response === 'object') {\n    guidebook = response;\n  } else {\n    throw new Error('Failed to parse guidebook JSON: ' + e.message);\n  }\n}\n\nreturn [{ json: guidebook }];"
+      },
+      "id": "parse-json",
+      "name": "Parse JSON",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [440, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// 가이드북 품질 검증\nconst guidebook = $input.first().json;\nconst errors = [];\nconst warnings = [];\n\n// 1. Step 개수 확인 (6-12개)\nif (!guidebook.steps || guidebook.steps.length < 6) {\n  errors.push(`Step 개수 부족: ${guidebook.steps?.length || 0}개 (최소 6개 필요)`);\n} else if (guidebook.steps.length > 12) {\n  warnings.push(`Step 개수 초과: ${guidebook.steps.length}개 (권장 12개 이하)`);\n}\n\n// 2. 복붙 블록 최소 3개 확인\nlet copyBlockCount = 0;\nguidebook.steps?.forEach(step => {\n  step.content_blocks?.forEach(block => {\n    if (block.type === 'copy_block') copyBlockCount++;\n  });\n});\nif (copyBlockCount < 3) {\n  errors.push(`복붙 블록 부족: ${copyBlockCount}개 (최소 3개 필요)`);\n}\n\n// 3. 분기(branch) 최소 2개 확인\nlet branchCount = 0;\nguidebook.steps?.forEach(step => {\n  step.content_blocks?.forEach(block => {\n    if (block.type === 'branch') branchCount++;\n  });\n});\nif (branchCount < 2) {\n  errors.push(`분기 블록 부족: ${branchCount}개 (최소 2개 필요)`);\n}\n\n// 4. 프롬프트 팩 개수 확인 (4-6개)\nif (!guidebook.prompt_pack || guidebook.prompt_pack.length < 4) {\n  errors.push(`프롬프트 팩 부족: ${guidebook.prompt_pack?.length || 0}개 (최소 4개 필요)`);\n} else if (guidebook.prompt_pack.length > 6) {\n  warnings.push(`프롬프트 팩 초과: ${guidebook.prompt_pack.length}개 (권장 6개 이하)`);\n}\n\n// 5. References 최소 8개 확인\nif (!guidebook.references || guidebook.references.length < 8) {\n  warnings.push(`References 부족: ${guidebook.references?.length || 0}개 (권장 8개 이상)`);\n}\n\n// 6. 필수 섹션 확인\nif (!guidebook.header?.title) errors.push('header.title 누락');\nif (!guidebook.header?.category) errors.push('header.category 누락');\nif (!guidebook.summary_cards?.one_liner) warnings.push('summary_cards.one_liner 누락');\n\n// 결과 반환\nreturn [{\n  json: {\n    valid: errors.length === 0,\n    errors: errors,\n    warnings: warnings,\n    guidebook: guidebook,\n    stats: {\n      step_count: guidebook.steps?.length || 0,\n      copy_block_count: copyBlockCount,\n      branch_count: branchCount,\n      prompt_pack_count: guidebook.prompt_pack?.length || 0,\n      reference_count: guidebook.references?.length || 0\n    }\n  }\n}];"
+      },
+      "id": "validate",
+      "name": "Validate Quality",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [660, 100]
+    },
+    {
+      "parameters": {
+        "conditions": {
+          "options": {
+            "caseSensitive": true,
+            "leftValue": "",
+            "typeValidation": "strict"
+          },
+          "conditions": [
+            {
+              "id": "validation-check",
+              "leftValue": "={{ $json.valid }}",
+              "rightValue": true,
+              "operator": {
+                "type": "boolean",
+                "operation": "equals"
+              }
+            }
+          ],
+          "combinator": "and"
+        },
+        "options": {}
+      },
+      "id": "if-valid",
+      "name": "If Valid",
+      "type": "n8n-nodes-base.if",
+      "typeVersion": 2.2,
+      "position": [880, 100]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Supabase 업로드용 데이터 변환\nconst data = $input.first().json;\nconst guidebook = data.guidebook;\n\nconst guideData = {\n  item_id: `guide_${Date.now()}`,\n  item_type: 'guide',\n  category: guidebook.header.category,\n  title: guidebook.header.title,\n  one_liner: guidebook.summary_cards.one_liner,\n  description: guidebook.header.introduction,\n  difficulty: guidebook.header.difficulty,\n  estimated_time: guidebook.header.estimated_time,\n  tools: guidebook.header.tools,\n  tags: guidebook.header.tags,\n  content_json: guidebook,\n  created_at: new Date().toISOString(),\n  stats: data.stats,\n  warnings: data.warnings\n};\n\nreturn [{ json: guideData }];"
+      },
+      "id": "format-for-db",
+      "name": "Format for DB",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1100, 0]
+    },
+    {
+      "parameters": {
+        "operation": "create",
+        "tableId": "guides",
+        "fieldsUi": {
+          "fieldValues": [
+            { "fieldName": "item_id", "fieldValue": "={{ $json.item_id }}" },
+            { "fieldName": "item_type", "fieldValue": "={{ $json.item_type }}" },
+            { "fieldName": "category", "fieldValue": "={{ $json.category }}" },
+            { "fieldName": "title", "fieldValue": "={{ $json.title }}" },
+            { "fieldName": "one_liner", "fieldValue": "={{ $json.one_liner }}" },
+            { "fieldName": "description", "fieldValue": "={{ $json.description }}" },
+            { "fieldName": "difficulty", "fieldValue": "={{ $json.difficulty }}" },
+            { "fieldName": "estimated_time", "fieldValue": "={{ $json.estimated_time }}" },
+            { "fieldName": "tools", "fieldValue": "={{ JSON.stringify($json.tools) }}" },
+            { "fieldName": "tags", "fieldValue": "={{ JSON.stringify($json.tags) }}" },
+            { "fieldName": "content_json", "fieldValue": "={{ JSON.stringify($json.content_json) }}" },
+            { "fieldName": "created_at", "fieldValue": "={{ $json.created_at }}" }
+          ]
+        }
+      },
+      "id": "supabase-insert",
+      "name": "Supabase Insert",
+      "type": "n8n-nodes-base.supabase",
+      "typeVersion": 1,
+      "position": [1320, 0],
+      "credentials": {
+        "supabaseApi": {
+          "id": "YOUR_SUPABASE_CREDENTIAL_ID",
+          "name": "Supabase API"
+        }
+      }
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: true, message: '가이드북 생성 및 DB 저장 완료', data: { item_id: $json.item_id, title: $json.title, category: $json.category } }) }}",
+        "options": {
+          "responseCode": 200,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-success",
+      "name": "Respond Success",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1540, 0]
+    },
+    {
+      "parameters": {
+        "respondWith": "json",
+        "responseBody": "={{ JSON.stringify({ success: false, message: '품질 검증 실패', errors: $json.errors, warnings: $json.warnings, stats: $json.stats, guidebook: $json.guidebook }) }}",
+        "options": {
+          "responseCode": 400,
+          "responseHeaders": {
+            "entries": [
+              {
+                "name": "Content-Type",
+                "value": "application/json"
+              }
+            ]
+          }
+        }
+      },
+      "id": "respond-error",
+      "name": "Respond Error",
+      "type": "n8n-nodes-base.respondToWebhook",
+      "typeVersion": 1.1,
+      "position": [1100, 200]
+    },
+    {
+      "parameters": {
+        "mode": "runOnceForAllItems",
+        "jsCode": "// Manual Trigger 성공 출력\nconst data = $input.first().json;\nreturn [{\n  json: {\n    success: true,\n    message: '가이드북 생성 및 DB 저장 완료',\n    item_id: data.item_id,\n    title: data.title,\n    category: data.category,\n    stats: data.stats\n  }\n}];"
+      },
+      "id": "manual-success",
+      "name": "Manual Success Output",
+      "type": "n8n-nodes-base.code",
+      "typeVersion": 2,
+      "position": [1540, -150]
+    }
+  ],
+  "connections": {
+    "Manual Trigger": {
+      "main": [
+        [
+          {
+            "node": "Set Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Webhook": {
+      "main": [
+        [
+          {
+            "node": "Set Input",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Set Input": {
+      "main": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "OpenAI GPT-4o": {
+      "ai_languageModel": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_languageModel",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Simple Memory": {
+      "ai_memory": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_memory",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Web Search Tool": {
+      "ai_tool": [
+        [
+          {
+            "node": "AI Agent",
+            "type": "ai_tool",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "AI Agent": {
+      "main": [
+        [
+          {
+            "node": "Parse JSON",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Parse JSON": {
+      "main": [
+        [
+          {
+            "node": "Validate Quality",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Validate Quality": {
+      "main": [
+        [
+          {
+            "node": "If Valid",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "If Valid": {
+      "main": [
+        [
+          {
+            "node": "Format for DB",
+            "type": "main",
+            "index": 0
+          }
+        ],
+        [
+          {
+            "node": "Respond Error",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Format for DB": {
+      "main": [
+        [
+          {
+            "node": "Supabase Insert",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    },
+    "Supabase Insert": {
+      "main": [
+        [
+          {
+            "node": "Respond Success",
+            "type": "main",
+            "index": 0
+          },
+          {
+            "node": "Manual Success Output",
+            "type": "main",
+            "index": 0
+          }
+        ]
+      ]
+    }
+  },
+  "settings": {
+    "executionOrder": "v1"
+  },
+  "staticData": null,
+  "pinData": {}
+}
