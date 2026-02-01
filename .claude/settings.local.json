@@ -1,0 +1,8 @@
+{
+  "permissions": {
+    "allow": [
+      "Bash(xargs -0 -I{} sh -c 'wc -c < \"\"{}\"\" | tr -d \"\" \"\" | xargs -I@ echo \"\"@ {}\"\"')",
+      "Bash(git add:*)"
+    ]
+  }
+}
